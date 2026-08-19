@@ -12,8 +12,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Set up Java JDK 17
         uses: actions/setup-java@v4
@@ -21,9 +19,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Android NDK & CMake
+      - name: Install Android NDK
         run: |
-          sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
+          sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/25.2.9519653" >> $GITHUB_ENV
 
       - name: Set up Flutter
@@ -33,20 +31,12 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # [핵심] 호환되지 않는 Gradle 구조를 최신 프로젝트 스펙으로 재생성합니다.
+      - name: Re-generate Android Project Structure
+        run: flutter create . --platforms=android
+
       - name: Install dependencies
         run: flutter pub get
-
-      # llama_cpp_dart 빌드에 필요한 llama.cpp 소스코드 체크아웃
-      - name: Fetch llama.cpp source for llama_cpp_dart
-        run: |
-          LLAMA_DIR=$(find /home/runner/.pub-cache/hosted/pub.dev/ -maxdepth 1 -name "llama_cpp_dart-*" | head -n 1)
-          if [ -d "$LLAMA_DIR" ]; then
-            echo "Found llama_cpp_dart at $LLAMA_DIR"
-            cd "$LLAMA_DIR/android"
-            if [ ! -d "llama.cpp" ]; then
-              git clone https://github.com/ggerganov/llama.cpp.git
-            fi
-          fi
 
       - name: Build Release APK
         run: flutter build apk --release --target-platform android-arm64
