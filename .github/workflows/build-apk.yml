@@ -31,9 +31,9 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 충돌 없이 표준 안드로이드 프로젝트 구조를 연동합니다.
+      # --force 대신 올바른 옵션인 --overwrite를 적용했습니다.
       - name: Re-generate Android Project Files
-        run: flutter create . --platforms=android --force
+        run: flutter create . --platforms=android --overwrite
 
       - name: Install dependencies
         run: flutter pub get
