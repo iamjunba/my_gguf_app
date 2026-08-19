@@ -1,0 +1,29 @@
+name: local_gguf_ai_runner
+description: "온디바이스 GGUF AI 모델을 구동하는 Flutter 프로젝트 설정 파일"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # 온디바이스 GGUF C++ NDK 추론 엔진 바인딩
+  llama_cpp_dart: ^0.1.0
+  # 로컬 저장소 .gguf 파일 선택기
+  file_picker: ^8.0.0
+  # 세션 AI 프로필 이미지 선택기
+  image_picker: ^1.0.7
+  # 로컬 세션 및 채팅 내역 저장용 SQLite
+  sqflite: ^2.3.0
+  path: ^1.9.0
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
