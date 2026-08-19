@@ -19,10 +19,15 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Build Essentials (Fast APT)
+      # [수정됨] Ubuntu 24.04 포맷 호환 및 IPv6 무한 멈춤(Hang) 방지
+      - name: Install Build Essentials (Fix APT Hang)
         run: |
-          sudo sed -i 's#http://archive.ubuntu.com/ubuntu/#http://azure.archive.ubuntu.com/ubuntu/#g' /etc/apt/sources.list /etc/apt/sources.list.d/* || true
-          sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout="5"
+          # 1. 24.04(Noble)의 새로운 파일(.sources)과 https 포맷까지 싹 다 Azure 초고속 서버로 교체
+          sudo sed -i 's/archive.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list || true
+          sudo sed -i 's/security.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list || true
+          
+          # 2. IPv4 강제 접속(ForceIPv4)으로 무한 멈춤 버그 방지 및 타임아웃 10초 설정
+          sudo apt-get update -y -o Acquire::ForceIPv4=true -o Acquire::Retries=3 -o Acquire::http::Timeout="10"
           sudo apt-get install -y --no-install-recommends ninja-build clang pkg-config
 
       - name: Install Android NDK & CMake
@@ -42,18 +47,17 @@ jobs:
           rm -rf packages/llama_cpp_dart
           git clone --recursive https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
 
-      # 3. [핵심 방어선] 메모리 터짐 방지 및 NDK 강제 고정
       - name: Configure Android Project & Prevent Crash
         run: |
           flutter create . --platforms=android
 
-          # C++ 컴파일 시 메모리 부족(OOM)으로 인한 튕김 방지 (4GB 할당)
+          # 메모리 부족(OOM) 방지 (4GB 할당)
           echo "org.gradle.jvmargs=-Xmx4g" >> android/gradle.properties
           
-          # NDK 경로를 로컬 설정에 강제 주입하여 경로 유실 원천 차단
+          # NDK 경로 유실 방지
           echo "ndk.dir=${ANDROID_HOME}/ndk/25.2.9519653" >> android/local.properties
 
-          # 최신 NDK 호환성을 위해 최소 지원 버전 26으로 상향
+          # 최소 지원 버전 상향
           sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle || true
           sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle.kts || true
 
