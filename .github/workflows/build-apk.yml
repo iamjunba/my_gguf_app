@@ -19,17 +19,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # [수정됨] Ubuntu 24.04 포맷 호환 및 IPv6 무한 멈춤(Hang) 방지
-      - name: Install Build Essentials (Fix APT Hang)
-        run: |
-          # 1. 24.04(Noble)의 새로운 파일(.sources)과 https 포맷까지 싹 다 Azure 초고속 서버로 교체
-          sudo sed -i 's/archive.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list || true
-          sudo sed -i 's/security.ubuntu.com/azure.archive.ubuntu.com/g' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list || true
-          
-          # 2. IPv4 강제 접속(ForceIPv4)으로 무한 멈춤 버그 방지 및 타임아웃 10초 설정
-          sudo apt-get update -y -o Acquire::ForceIPv4=true -o Acquire::Retries=3 -o Acquire::http::Timeout="10"
-          sudo apt-get install -y --no-install-recommends ninja-build clang pkg-config
-
+      # [해결] 멈춤 현상을 유발하는 apt-get update 단계를 완전히 삭제했습니다.
+      # 안드로이드 C++ 빌드에 필요한 도구는 아래 NDK 안에 모두 들어있습니다.
       - name: Install Android NDK & CMake
         run: |
           sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
