@@ -19,39 +19,43 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # 안드로이드 NDK & CMake 세팅
       - name: Install Android NDK & CMake
         run: |
           sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/25.2.9519653" >> $GITHUB_ENV
 
-      # code_assets(Dart SDK 3.7+)를 지원하는 검증된 Flutter 3.27.4 버전 지정
+      # 최신 Stable 채널 Flutter 사용
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.4'
           channel: 'stable'
           cache: true
 
-      # 1. llama_cpp_dart 서브모듈 클론
-      - name: Clone llama_cpp_dart with Submodules
+      # 1. llama_cpp_dart를 과도한 SDK 버전 요구가 없던 안정된 커밋 시점으로 체크아웃
+      - name: Clone Stable llama_cpp_dart
         run: |
           mkdir -p packages
           rm -rf packages/llama_cpp_dart
           git clone --recursive https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
+          cd packages/llama_cpp_dart
+          # 과도한 Dart 3.10+ 요구가 들어가기 전의 안정적인 커밋 지점으로 이동
+          git checkout v0.2.1 2>/dev/null || git checkout $(git rev-list -n 1 --before="2024-11-01" HEAD)
+          git submodule update --init --recursive
 
-      # 2. 안드로이드 플랫폼 빌드 구조 생성
+      # 2. 안드로이드 빌드 환경 구조 재생성
       - name: Re-generate Android Project Structure
         run: flutter create . --platforms=android
 
-      # 3. 의존성 패키지 설치
+      # 3. 의존성 패키지 가져오기
       - name: Install dependencies
         run: flutter pub get
 
-      # 4. APK 빌드
+      # 4. Release APK 빌드
       - name: Build Release APK
         run: flutter build apk --release --target-platform android-arm64
 
-      # 5. APK 아티팩트 업로드
+      # 5. APK 아티팩트 저장 및 제출
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
         with:
