@@ -36,20 +36,365 @@ jobs:
           rm -rf packages/llama_cpp_dart
           git clone --recursive https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
 
-      - name: Configure Android Project & Prevent Crash
+      - name: Generate App Source Code & Config
         run: |
-          # 1. 안드로이드 플랫폼 파일 강제 생성 (기존 파일 충돌 방지)
+          # 1. [핵심 수정] 안드로이드 뼈대 폴더 먼저 생성 (이 부분이 빠져있었습니다!)
           flutter create . --platforms=android --overwrite
 
-          # 2. 메모리 부족(OOM) 방지 및 Gradle 설정
+          # 2. pubspec.yaml 덮어쓰기 (필수 패키지 포함)
+          cat << 'EOF' > pubspec.yaml
+          name: local_ai_runner
+          description: Local GGUF LLM Runner
+          publish_to: 'none'
+          version: 1.0.0+1
+
+          environment:
+            sdk: '>=3.0.0 <4.0.0'
+
+          dependencies:
+            flutter:
+              sdk: flutter
+            llama_cpp_dart:
+              path: packages/llama_cpp_dart
+            file_picker: ^8.0.0
+            shared_preferences: ^2.2.2
+            path_provider: ^2.1.2
+
+          dev_dependencies:
+            flutter_test:
+              sdk: flutter
+            flutter_lints: ^3.0.0
+
+          flutter:
+            uses-material-design: true
+          EOF
+
+          # 3. 소스 코드 생성
+          mkdir -p lib
+          cat << 'EOF' > lib/main.dart
+          import 'package:flutter/material.dart';
+          import 'package:file_picker/file_picker.dart';
+          import 'package:shared_preferences/shared_preferences.dart';
+          import 'package:llama_cpp_dart/llama_cpp_dart.dart';
+          import 'dart:io';
+
+          void main() {
+            runApp(const LocalAIApp());
+          }
+
+          class ChatSession {
+            String id;
+            String title;
+            String systemPrompt;
+            String avatarPath;
+            List<Map<String, String>> messages;
+
+            ChatSession({
+              required this.id,
+              required this.title,
+              required this.systemPrompt,
+              required this.avatarPath,
+              required this.messages,
+            });
+          }
+
+          class LocalAIApp extends StatelessWidget {
+            const LocalAIApp({super.key});
+
+            @override
+            Widget build(BuildContext context) {
+              return MaterialApp(
+                title: 'Local AI Runner',
+                theme: ThemeData(primarySwatch: Colors.blue),
+                home: const HomeScreen(),
+              );
+            }
+          }
+
+          class HomeScreen extends StatefulWidget {
+            const HomeScreen({super.key});
+
+            @override
+            State<HomeScreen> createState() => _HomeScreenState();
+          }
+
+          class _HomeScreenState extends State<HomeScreen> {
+            String? _modelPath;
+            List<ChatSession> _sessions = [];
+            ChatSession? _currentSession;
+            bool _isModelLoaded = false;
+            Llama? _llama;
+
+            @override
+            void initState() {
+              super.initState();
+              _loadSettings();
+              _initDefaultSessions();
+            }
+
+            Future<void> _loadSettings() async {
+              final prefs = await SharedPreferences.getInstance();
+              setState(() {
+                _modelPath = prefs.getString('model_path');
+              });
+              if (_modelPath != null && File(_modelPath!).existsSync()) {
+                _initLlamaModel(_modelPath!);
+              }
+            }
+
+            Future<void> _initLlamaModel(String path) async {
+              try {
+                _llama = Llama(path);
+                setState(() {
+                  _isModelLoaded = true;
+                });
+              } catch (e) {
+                print("Model load error: $e");
+              }
+            }
+
+            void _initDefaultSessions() {
+              _sessions.add(
+                ChatSession(
+                  id: '1',
+                  title: '기본 어시스턴트',
+                  systemPrompt: '당신은 친절한 AI 어시스턴트입니다.',
+                  avatarPath: '',
+                  messages: [],
+                ),
+              );
+              _currentSession = _sessions.first;
+            }
+
+            Future<void> _pickModelFile() async {
+              FilePickerResult? result = await FilePicker.platform.pickFiles(
+                type: FileType.any,
+              );
+
+              if (result != null && result.files.single.path != null) {
+                String path = result.files.single.path!;
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('model_path', path);
+                setState(() {
+                  _modelPath = path;
+                });
+                _initLlamaModel(path);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('모델 로드됨: ${result.files.single.name}')),
+                );
+              }
+            }
+
+            void _addNewSession() {
+              String id = DateTime.now().millisecondsSinceEpoch.toString();
+              setState(() {
+                _sessions.add(
+                  ChatSession(
+                    id: id,
+                    title: '새 세션 ${_sessions.length + 1}',
+                    systemPrompt: '당신은 유용한 비서입니다.',
+                    avatarPath: '',
+                    messages: [],
+                  ),
+                );
+              });
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  title: Text(_currentSession?.title ?? 'Local AI'),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.settings),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SettingsScreen(
+                              modelPath: _modelPath,
+                              onModelPicked: _pickModelFile,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                drawer: Drawer(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      DrawerHeader(
+                        decoration: const BoxDecoration(color: Colors.blue),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            const Text(
+                              '세션 목록',
+                              style: TextStyle(color: Colors.white, fontSize: 24),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _isModelLoaded ? '모델 상태: 연결됨' : '모델 상태: 미연결 (설정에서 선택)',
+                              style: const TextStyle(color: Colors.yellow, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      ..._sessions.map((session) => ListTile(
+                            leading: CircleAvatar(
+                              backgroundImage: session.avatarPath.isNotEmpty
+                                  ? FileImage(File(session.avatarPath))
+                                  : null,
+                              child: session.avatarPath.isEmpty
+                                  ? const Icon(Icons.person)
+                                  : null,
+                            ),
+                            title: Text(session.title),
+                            subtitle: Text(
+                              session.systemPrompt,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            selected: _currentSession?.id == session.id,
+                            onTap: () {
+                              setState(() {
+                                _currentSession = session;
+                              });
+                              Navigator.pop(context);
+                            },
+                          )),
+                      const Divider(),
+                      ListTile(
+                        leading: const Icon(Icons.add),
+                        title: const Text('세션 추가'),
+                        onTap: () {
+                          _addNewSession();
+                          Navigator.pop(context);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                body: Column(
+                  children: [
+                    Expanded(
+                      child: _currentSession == null || _currentSession!.messages.isEmpty
+                          ? Center(
+                              child: Text(
+                                _isModelLoaded
+                                    ? '대화를 시작하세요.\n현재 세션 프롬프트: ${_currentSession?.systemPrompt}'
+                                    : '설정(우측 상단 ⚙️)에서 GGUF 모델 파일을 먼저 선택해주세요.',
+                                textAlign: TextAlign.center,
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: _currentSession!.messages.length,
+                              itemBuilder: (context, index) {
+                                final msg = _currentSession!.messages[index];
+                                bool isUser = msg['role'] == 'user';
+                                return ListTile(
+                                  leading: isUser
+                                      ? const Icon(Icons.person)
+                                      : CircleAvatar(
+                                          backgroundImage: _currentSession!.avatarPath.isNotEmpty
+                                              ? FileImage(File(_currentSession!.avatarPath))
+                                              : null,
+                                          child: _currentSession!.avatarPath.isEmpty
+                                              ? const Icon(Icons.smart_toy)
+                                              : null,
+                                        ),
+                                  title: Text(isUser ? '나' : 'AI'),
+                                  subtitle: Text(msg['content'] ?? ''),
+                                );
+                              },
+                            ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              onSubmitted: (val) {
+                                if (val.trim().isEmpty) return;
+                                setState(() {
+                                  _currentSession!.messages.add({'role': 'user', 'content': val});
+                                  String aiReply = _isModelLoaded
+                                      ? "모델 응답 처리 중..."
+                                      : "모델이 로드되지 않았습니다. 설정에서 GGUF 파일을 선택하세요.";
+                                  _currentSession!.messages.add({'role': 'ai', 'content': aiReply});
+                                });
+                              },
+                              decoration: const InputDecoration(
+                                hintText: '메시지를 입력하세요...',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+
+          class SettingsScreen extends StatefulWidget {
+            final String? modelPath;
+            final VoidCallback onModelPicked;
+
+            const SettingsScreen({
+              super.key,
+              required this.modelPath,
+              required this.onModelPicked,
+            });
+
+            @override
+            State<SettingsScreen> createState() => _SettingsScreenState();
+          }
+
+          class _SettingsScreenState extends State<SettingsScreen> {
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(title: const Text('앱 설정')),
+                body: ListView(
+                  padding: const EdgeInsets.all(16.0),
+                  children: [
+                    const Text(
+                      '전체 모델 저장소 설정',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.modelPath != null
+                          ? '선택된 모델 경로:\n${widget.modelPath}'
+                          : '선택된 모델 파일이 없습니다. 기기 저장소에서 .gguf 파일을 선택해주세요.',
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      onPressed: widget.onModelPicked,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('내 저장소에서 GGUF 모델 로드'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          }
+          EOF
+
+          # 4. 방금 만든 android 폴더에 Gradle 및 NDK 설정 주입
           echo "org.gradle.jvmargs=-Xmx4g" >> android/gradle.properties
           echo "android.useAndroidX=true" >> android/gradle.properties
           echo "android.enableJetifier=true" >> android/gradle.properties
-          
-          # 3. NDK 경로 고정
           echo "ndk.dir=${ANDROID_HOME}/ndk/25.2.9519653" >> android/local.properties
 
-          # 4. 최소 SDK 버전을 26(Android 8.0)으로 강제 상향 (LLM 필수 조건)
           sed -i 's/minSdkVersion.*/minSdkVersion 26/g' android/app/build.gradle || true
           sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle || true
           sed -i 's/minSdk = .*/minSdk = 26/g' android/app/build.gradle.kts || true
@@ -57,9 +402,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # [추가] 빌드 전 상세 로그(--verbose)를 켜서 혹시 모를 에러를 잡기 쉽게 설정
       - name: Build Release APK
-        run: flutter build apk --release --target-platform android-arm64 --verbose
+        run: flutter build apk --release --target-platform android-arm64
 
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
