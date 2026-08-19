@@ -19,11 +19,12 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 1. [핵심] Flutter C++ 네이티브 빌드에 필수적인 도구(Ninja, Clang) 사전 설치
-      - name: Install Build Essentials
+      # 1. [속도 최적화] APT 미러를 Azure 초고속 서버로 교체 및 타임아웃(5초) 적용
+      - name: Install Build Essentials (Fast APT)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build clang pkg-config
+          sudo sed -i 's#http://archive.ubuntu.com/ubuntu/#http://azure.archive.ubuntu.com/ubuntu/#g' /etc/apt/sources.list /etc/apt/sources.list.d/* || true
+          sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout="5"
+          sudo apt-get install -y --no-install-recommends ninja-build clang pkg-config
 
       - name: Install Android NDK & CMake
         run: |
@@ -36,19 +37,17 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 2. 어떠한 꼼수 스크립트 없이 순정 상태로 안전하게 클론
+      # 2. 순정 상태로 서브모듈 포함 클론
       - name: Clone llama_cpp_dart
         run: |
           mkdir -p packages
           rm -rf packages/llama_cpp_dart
           git clone --recursive https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
 
-      # 3. 안드로이드 환경 재생성 및 minSdkVersion 안전 상향 (21 -> 26)
+      # 3. 안드로이드 빌드 세팅 및 minSdkVersion 상향
       - name: Re-generate Android Project Structure
         run: |
           flutter create . --platforms=android
-          
-          # 최신 LLVM/C++ 라이브러리 충돌 방지를 위해 최소 안드로이드 지원 버전을 26으로 상향
           sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle || true
           sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle.kts || true
 
