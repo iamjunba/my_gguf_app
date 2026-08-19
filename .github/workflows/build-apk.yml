@@ -19,37 +19,40 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # NDK 25b 버전 설치 및 환경변수 고정
       - name: Install Android NDK & CMake
         run: |
           sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/25.2.9519653" >> $GITHUB_ENV
 
+      # llama_cpp_dart 패키지와 완벽 호환되는 검증된 Flutter 3.22.3 지정
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.22.3'
           channel: 'stable'
           cache: true
 
-      # 1. llama_cpp_dart 라이브러리 및 llama.cpp 서브모듈 수급
+      # 1. llama_cpp_dart 라이브러리 및 llama.cpp C++ 네이티브 소스를 서브모듈로 다운로드
       - name: Clone llama_cpp_dart with Submodules
         run: |
           mkdir -p packages
           rm -rf packages/llama_cpp_dart
           git clone --recursive https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
 
-      # 2. 안드로이드 빌드 프로젝트 재구성
+      # 2. 안드로이드 플랫폼 빌드 구조 생성
       - name: Re-generate Android Project Structure
         run: flutter create . --platforms=android
 
-      # 3. 의존성 최신화
+      # 3. 의존성 다운로드 및 연결
       - name: Install dependencies
         run: flutter pub get
 
       # 4. APK 빌드
       - name: Build Release APK
-        run: flutter build apk --release --target-platform android-arm64 --verbose
+        run: flutter build apk --release --target-platform android-arm64
 
-      # 5. 빌드 결과물 업로드
+      # 5. 빌드 결과물(APK) 업로드
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
         with:
