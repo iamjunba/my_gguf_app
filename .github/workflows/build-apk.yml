@@ -19,47 +19,47 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 안드로이드 NDK 25.2.9519653 설치 및 경로 설정
+      # 1. [핵심] Flutter C++ 네이티브 빌드에 필수적인 도구(Ninja, Clang) 사전 설치
+      - name: Install Build Essentials
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build clang pkg-config
+
       - name: Install Android NDK & CMake
         run: |
           sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/25.2.9519653" >> $GITHUB_ENV
 
-      # 안정화 버전 Flutter 세팅
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
 
-      # 1. llama_cpp_dart 안전 클론 및 서브모듈 수동 준비
+      # 2. 어떠한 꼼수 스크립트 없이 순정 상태로 안전하게 클론
       - name: Clone llama_cpp_dart
         run: |
           mkdir -p packages
           rm -rf packages/llama_cpp_dart
-          git clone --depth 1 https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
-          cd packages/llama_cpp_dart
-          git submodule update --init --recursive --depth 1 || true
+          git clone --recursive https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
 
-      # 2. CMake/NDK 컴파일 오류 방지를 위한 build.gradle / CMakeLists 패치
-      - name: Fix NDK & CMake build flags
-        run: |
-          # Android build.gradle 에 NDK 경로 및 C++ 표준 강제
-          find packages/llama_cpp_dart/android -name "build.gradle" -exec sed -i 's/externalNativeBuild {/externalNativeBuild {\n        cmake {\n            arguments "-DANDROID_STL=c++_shared", "-DCMAKE_CXX_FLAGS=-std=c++20"\n        }/g' {} + || true
-
-      # 3. 안드로이드 빌드 환경 재생성
+      # 3. 안드로이드 환경 재생성 및 minSdkVersion 안전 상향 (21 -> 26)
       - name: Re-generate Android Project Structure
-        run: flutter create . --platforms=android
+        run: |
+          flutter create . --platforms=android
+          
+          # 최신 LLVM/C++ 라이브러리 충돌 방지를 위해 최소 안드로이드 지원 버전을 26으로 상향
+          sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle || true
+          sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle.kts || true
 
-      # 4. 의존성 다운로드
       - name: Install dependencies
         run: flutter pub get
 
-      # 5. APK 빌드 (Release)
+      # 4. APK 빌드
       - name: Build Release APK
         run: flutter build apk --release --target-platform android-arm64
 
-      # 6. APK 결과물 제출
+      # 5. 완성된 APK 저장 및 제출
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
         with:
