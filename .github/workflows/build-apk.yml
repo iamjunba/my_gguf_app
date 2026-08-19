@@ -31,9 +31,9 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # --force 대신 올바른 옵션인 --overwrite를 적용했습니다.
+      # 안드로이드 설정만 빌드 환경에 맞게 추가생성
       - name: Re-generate Android Project Files
-        run: flutter create . --platforms=android --overwrite
+        run: flutter create . --platforms=android
 
       - name: Install dependencies
         run: flutter pub get
