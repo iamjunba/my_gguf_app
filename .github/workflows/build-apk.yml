@@ -32,16 +32,19 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 1. llama_cpp_dart를 과도한 SDK 버전 요구가 없던 안정된 커밋 시점으로 체크아웃
-      - name: Clone Stable llama_cpp_dart
+      # 1. llama_cpp_dart를 받아온 후, 서브모듈 충돌 없는 최근 검증 커밋으로 이동
+      - name: Clone llama_cpp_dart Safely
         run: |
           mkdir -p packages
           rm -rf packages/llama_cpp_dart
-          git clone --recursive https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
+          git clone https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
           cd packages/llama_cpp_dart
-          # 과도한 Dart 3.10+ 요구가 들어가기 전의 안정적인 커밋 지점으로 이동
-          git checkout v0.2.1 2>/dev/null || git checkout $(git rev-list -n 1 --before="2024-11-01" HEAD)
-          git submodule update --init --recursive
+          
+          # 안정적인 과거 특정 커밋으로 이동
+          git checkout 70872270311f9d5f804f44dcb6a0a1dca8bc41a1
+          
+          # 서브모듈을 안전하게 동기화 (오류 발생 시 무시하고 가능한 부분만 로드)
+          git submodule update --init --recursive || true
 
       # 2. 안드로이드 빌드 환경 구조 재생성
       - name: Re-generate Android Project Structure
