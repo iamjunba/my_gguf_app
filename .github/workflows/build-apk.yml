@@ -32,20 +32,47 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 1. llama_cpp_dart 서브모듈 포함 다운로드
+      # 1. llama_cpp_dart 서브모듈 포함 클론
       - name: Clone llama_cpp_dart with Submodules
         run: |
           mkdir -p packages
           rm -rf packages/llama_cpp_dart
           git clone --recursive https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
 
-      # 2. [핵심 해결] sed 명령으로 pubspec.yaml 의 버전 제약 조건 완화
-      - name: Patch llama_cpp_dart environment constraints
+      # 2. [핵심] YAML 구조를 유지하면서 environment 제약 조건만 안전하게 수정
+      - name: Safe patch llama_cpp_dart pubspec environment
         run: |
-          sed -i 's/sdk:.*/sdk: ">=3.0.0 <4.0.0"/' packages/llama_cpp_dart/pubspec.yaml
-          sed -i 's/flutter:.*/flutter: ">=3.0.0"/' packages/llama_cpp_dart/pubspec.yaml
+          python3 -c "
+          with open('packages/llama_cpp_dart/pubspec.yaml', 'r') as f:
+              lines = f.readlines()
+
+          in_env = False
+          new_lines = []
+          for line in lines:
+              if line.strip().startswith('environment:'):
+                  in_env = True
+                  new_lines.append(line)
+                  continue
+              if in_env and line and not line.startswith(' ') and not line.startswith('\t'):
+                  in_env = False
+              
+              if in_env:
+                  if 'sdk:' in line:
+                      indent = line[:line.find('sdk:')]
+                      new_lines.append(f'{indent}sdk: \">=3.0.0 <4.0.0\"\n')
+                      continue
+                  if 'flutter:' in line:
+                      indent = line[:line.find('flutter:')]
+                      new_lines.append(f'{indent}flutter: \">=3.0.0\"\n')
+                      continue
+              
+              new_lines.append(line)
+
+          with open('packages/llama_cpp_dart/pubspec.yaml', 'w') as f:
+              f.writelines(new_lines)
+          "
           echo "=== Patched pubspec.yaml ==="
-          cat packages/llama_cpp_dart/pubspec.yaml | head -n 15
+          cat packages/llama_cpp_dart/pubspec.yaml | head -n 25
 
       # 3. 안드로이드 플랫폼 구조 생성
       - name: Re-generate Android Project Structure
