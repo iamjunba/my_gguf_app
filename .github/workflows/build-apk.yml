@@ -19,8 +19,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # [해결] 멈춤 현상을 유발하는 apt-get update 단계를 완전히 삭제했습니다.
-      # 안드로이드 C++ 빌드에 필요한 도구는 아래 NDK 안에 모두 들어있습니다.
       - name: Install Android NDK & CMake
         run: |
           sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
@@ -40,26 +38,31 @@ jobs:
 
       - name: Configure Android Project & Prevent Crash
         run: |
-          flutter create . --platforms=android
+          # 1. 안드로이드 플랫폼 파일 강제 생성 (기존 파일 충돌 방지)
+          flutter create . --platforms=android --overwrite
 
-          # 메모리 부족(OOM) 방지 (4GB 할당)
+          # 2. 메모리 부족(OOM) 방지 및 Gradle 설정
           echo "org.gradle.jvmargs=-Xmx4g" >> android/gradle.properties
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
           
-          # NDK 경로 유실 방지
+          # 3. NDK 경로 고정
           echo "ndk.dir=${ANDROID_HOME}/ndk/25.2.9519653" >> android/local.properties
 
-          # 최소 지원 버전 상향
+          # 4. 최소 SDK 버전을 26(Android 8.0)으로 강제 상향 (LLM 필수 조건)
+          sed -i 's/minSdkVersion.*/minSdkVersion 26/g' android/app/build.gradle || true
           sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle || true
-          sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle.kts || true
+          sed -i 's/minSdk = .*/minSdk = 26/g' android/app/build.gradle.kts || true
 
       - name: Install dependencies
         run: flutter pub get
 
+      # [추가] 빌드 전 상세 로그(--verbose)를 켜서 혹시 모를 에러를 잡기 쉽게 설정
       - name: Build Release APK
-        run: flutter build apk --release --target-platform android-arm64
+        run: flutter build apk --release --target-platform android-arm64 --verbose
 
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: local-gguf-ai-runner-release.apk
+          name: local-gguv-ai-runner-release.apk
           path: build/app/outputs/flutter-apk/app-release.apk
