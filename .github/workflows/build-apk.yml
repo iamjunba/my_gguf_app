@@ -19,17 +19,19 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 1. [속도 최적화] APT 미러를 Azure 초고속 서버로 교체 및 타임아웃(5초) 적용
       - name: Install Build Essentials (Fast APT)
         run: |
           sudo sed -i 's#http://archive.ubuntu.com/ubuntu/#http://azure.archive.ubuntu.com/ubuntu/#g' /etc/apt/sources.list /etc/apt/sources.list.d/* || true
           sudo apt-get update -o Acquire::Retries=3 -o Acquire::http::Timeout="5"
           sudo apt-get install -y --no-install-recommends ninja-build clang pkg-config
 
+      # 1. NDK 설치 및 환경변수 완전 등록
       - name: Install Android NDK & CMake
         run: |
           sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/25.2.9519653" >> $GITHUB_ENV
+          echo "NDK_HOME=${ANDROID_HOME}/ndk/25.2.9519653" >> $GITHUB_ENV
+          echo "MAKEFLAGS=-j2" >> $GITHUB_ENV
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -37,28 +39,30 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 2. 순정 상태로 서브모듈 포함 클론
+      # 2. 로컬 모듈 클론
       - name: Clone llama_cpp_dart
         run: |
           mkdir -p packages
           rm -rf packages/llama_cpp_dart
           git clone --recursive https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
 
-      # 3. 안드로이드 빌드 세팅 및 minSdkVersion 상향
+      # 3. 프로젝트 생성 및 minSdkVersion 설정
       - name: Re-generate Android Project Structure
         run: |
           flutter create . --platforms=android
           sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle || true
           sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle.kts || true
 
-      - name: Install dependencies
-        run: flutter pub get
+      - name: Install dependencies & Code Analyze
+        run: |
+          flutter pub get
+          flutter analyze || true
 
-      # 4. APK 빌드
+      # 4. 상세 로그(--verbose)를 포함한 APK 빌드
       - name: Build Release APK
-        run: flutter build apk --release --target-platform android-arm64
+        run: flutter build apk --release --target-platform android-arm64 --verbose
 
-      # 5. 완성된 APK 저장 및 제출
+      # 5. 완성된 APK 보관함 저장
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
         with:
