@@ -31,37 +31,39 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 1. 안드로이드 Gradle 프로젝트 최신화
+      # 1. 안드로이드 빌드 프로젝트 재구성
       - name: Re-generate Android Project Structure
         run: flutter create . --platforms=android
 
-      # 2. 의존성 패키지 다운로드
+      # 2. Flutter 의존성 가져오기
       - name: Install dependencies
         run: flutter pub get
 
-      # 3. 프로젝트 루트 및 pub-cache 양쪽에 llama.cpp 소스 배치
+      # 3. 모든 예상 위치에 llama.cpp 소스 배치
       - name: Setup llama.cpp Native Source
         run: |
-          # 프로젝트 루트에 llama.cpp 클론
-          if [ ! -d "llama.cpp" ]; then
-            git clone --recursive https://github.com/ggerganov/llama.cpp.git llama.cpp
-          fi
+          # 1) 원본 llama.cpp 클론
+          rm -rf llama.cpp
+          git clone --recursive https://github.com/ggerganov/llama.cpp.git llama.cpp
 
-          # pub-cache 내부 패키지 디렉터리에도 llama.cpp 동기화
-          PUB_CACHE_DIR="$HOME/.pub-cache/hosted/pub.dev"
-          LLAMA_PKG=$(find "$PUB_CACHE_DIR" -maxdepth 1 -name "llama_cpp_dart-*" | head -n 1)
-          if [ -n "$LLAMA_PKG" ]; then
-            echo "Found llama_cpp_dart at $LLAMA_PKG"
-            mkdir -p "$LLAMA_PKG/android"
-            rm -rf "$LLAMA_PKG/android/llama.cpp"
-            cp -r llama.cpp "$LLAMA_PKG/android/llama.cpp"
-          fi
+          # 2) android/ 디렉터리 하위에 배치
+          mkdir -p android/app
+          cp -r llama.cpp android/
+          
+          # 3) pub.dev 호스팅 캐시 디렉터리 전체 탐색 후 android/ 디렉터리에 복사
+          PUB_CACHE="$HOME/.pub-cache"
+          find "$PUB_CACHE" -type d -name "llama_cpp_dart*" | while read -r pkg_dir; do
+            echo "Copying llama.cpp into $pkg_dir/android/"
+            mkdir -p "$pkg_dir/android"
+            rm -rf "$pkg_dir/android/llama.cpp"
+            cp -r llama.cpp "$pkg_dir/android/llama.cpp"
+          done
 
       # 4. APK 빌드
       - name: Build Release APK
         run: flutter build apk --release --target-platform android-arm64
 
-      # 5. 빌드 결과물(APK) 아티팩트 업로드
+      # 5. 빌드 완료된 APK 저장 및 제출
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
         with:
