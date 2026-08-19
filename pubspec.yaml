@@ -9,7 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  llama_cpp_dart: ^0.1.0
+  # Flutter SDK 호환 버전으로 조정 (0.1.0 -> 0.0.7)
+  llama_cpp_dart: ^0.0.7
   file_picker: ^8.0.0
   image_picker: ^1.0.7
   sqflite: ^2.3.0
@@ -20,6 +21,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+
+# 의존성 패키지 간의 버전 충돌을 강제로 해결하는 설정입니다.
+dependency_overrides:
+  typed_isolate: ^5.0.0
 
 flutter:
   uses-material-design: true
