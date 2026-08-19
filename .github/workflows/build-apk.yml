@@ -31,10 +31,21 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # [핵심] 누락되거나 구버전인 android/ Gradle 프로젝트 구조를 표준 최신 구조로 자동 생성합니다.
+      - name: Re-generate Android Gradle Project Files
+        run: flutter create . --platforms=android
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build Release APK
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Upload APK Release Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-gguf-ai-runner-release.apk
+          path: build/app/outputs/flutter-apk/app-release.apk      - name: Build Release APK
         run: flutter build apk --release --target-platform android-arm64
 
       - name: Upload APK Release Artifact
