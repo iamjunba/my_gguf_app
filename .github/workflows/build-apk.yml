@@ -31,47 +31,42 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 1. 안드로이드 플랫폼 구조 생성
       - name: Re-generate Android Project Structure
         run: flutter create . --platforms=android
 
-      # 2. 패키지 다운로드
       - name: Install dependencies
         run: flutter pub get
 
-      # 3. llama.cpp 소스를 전역 공간(/tmp/llama.cpp)에 준비 및 CMakeLists.txt 패치
-      - name: Prepare llama.cpp and Patch CMake
+      # [핵심] 프로젝트 루트, android/, pub-cache 내부 등 예상 가능한 모든 작업 디렉터리에 llama.cpp 대치
+      - name: Setup llama.cpp Source Everywhere
         run: |
-          # 1) 원본 llama.cpp C++ 소스 코드 클론
+          # 1) 원본 llama.cpp C++ 소스 클론
           rm -rf /tmp/llama.cpp
           git clone --recursive https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp
 
-          # 2) pub-cache 내의 llama_cpp_dart 패키지 탐색 및 llama.cpp 주입
+          # 2) 루트 및 android/ 디렉터리에 배치
+          rm -rf llama.cpp android/llama.cpp android/app/llama.cpp
+          cp -r /tmp/llama.cpp ./llama.cpp
+          cp -r /tmp/llama.cpp ./android/llama.cpp
+          mkdir -p ./android/app
+          cp -r /tmp/llama.cpp ./android/app/llama.cpp
+
+          # 3) pub-cache 패키지 디렉터리의 모든 서브디렉터리에 llama.cpp 복사 및 심볼릭 링크 생성
           PUB_CACHE="$HOME/.pub-cache"
           find "$PUB_CACHE" -type d -name "llama_cpp_dart*" | while read -r pkg_dir; do
-            echo "Processing package directory: $pkg_dir"
+            echo "Populating llama.cpp into $pkg_dir"
+            mkdir -p "$pkg_dir/android"
+            mkdir -p "$pkg_dir/android/app"
             
-            # 패키지 android 폴더에 llama.cpp 복사
-            mkdir -p "$pkg_dir/android/llama.cpp"
-            cp -r /tmp/llama.cpp/* "$pkg_dir/android/llama.cpp/"
-            
-            # android/CMakeLists.txt 파일이 있을 경우, 상대경로 참조 오류 방지를 위해 absolute path 패치
-            if [ -f "$pkg_dir/android/CMakeLists.txt" ]; then
-              echo "Patching CMakeLists.txt in $pkg_dir/android/"
-              sed -i 's|add_subdirectory(./llama.cpp|add_subdirectory('"$pkg_dir"'/android/llama.cpp|g' "$pkg_dir/android/CMakeLists.txt"
-              sed -i 's|add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp"|add_subdirectory('"$pkg_dir"'/android/llama.cpp|g' "$pkg_dir/android/CMakeLists.txt"
-            fi
+            rm -rf "$pkg_dir/llama.cpp" "$pkg_dir/android/llama.cpp" "$pkg_dir/android/app/llama.cpp"
+            cp -r /tmp/llama.cpp "$pkg_dir/llama.cpp"
+            cp -r /tmp/llama.cpp "$pkg_dir/android/llama.cpp"
+            cp -r /tmp/llama.cpp "$pkg_dir/android/app/llama.cpp"
           done
 
-          # 3) 현재 프로젝트의 android 폴더에도 배치
-          mkdir -p android/llama.cpp
-          cp -r /tmp/llama.cpp/* android/llama.cpp/
-
-      # 4. APK 빌드
       - name: Build Release APK
         run: flutter build apk --release --target-platform android-arm64
 
-      # 5. APK 결과물 업로드
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
         with:
