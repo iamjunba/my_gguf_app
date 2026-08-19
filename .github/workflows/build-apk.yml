@@ -24,7 +24,7 @@ jobs:
           sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/25.2.9519653" >> $GITHUB_ENV
 
-      # 안정화 버전 Flutter 3.22.3 세팅
+      # 안정화 버전 Flutter 3.22.3
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -32,37 +32,26 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 1. llama_cpp_dart 패키지 및 C++ 소스 클론
+      # 1. llama_cpp_dart 서브모듈 포함 다운로드
       - name: Clone llama_cpp_dart with Submodules
         run: |
           mkdir -p packages
           rm -rf packages/llama_cpp_dart
           git clone --recursive https://github.com/netdur/llama_cpp_dart.git packages/llama_cpp_dart
 
-      # 2. [핵심 해결책] llama_cpp_dart의 pubspec.yaml에서 Flutter & Dart SDK 요구 버전을 현재 환경에 맞게 무력화
+      # 2. [핵심 해결] sed 명령으로 pubspec.yaml 의 버전 제약 조건 완화
       - name: Patch llama_cpp_dart environment constraints
         run: |
-          python3 -c "
-          path = 'packages/llama_cpp_dart/pubspec.yaml'
-          with open(path, 'r') as f:
-              content = f.read()
-          
-          # environment 영역 내의 sdk 및 flutter 버전 제약조건을 낮춤
-          import re
-          content = re.sub(r'sdk:\s*[\"'].*?[\"']', 'sdk: \">=3.0.0 <4.0.0\"', content)
-          content = re.sub(r'flutter:\s*[\"'].*?[\"']', 'flutter: \">=3.0.0\"', content)
-          
-          with open(path, 'w') as f:
-              f.write(content)
-          "
+          sed -i 's/sdk:.*/sdk: ">=3.0.0 <4.0.0"/' packages/llama_cpp_dart/pubspec.yaml
+          sed -i 's/flutter:.*/flutter: ">=3.0.0"/' packages/llama_cpp_dart/pubspec.yaml
           echo "=== Patched pubspec.yaml ==="
-          cat packages/llama_cpp_dart/pubspec.yaml | head -n 20
+          cat packages/llama_cpp_dart/pubspec.yaml | head -n 15
 
       # 3. 안드로이드 플랫폼 구조 생성
       - name: Re-generate Android Project Structure
         run: flutter create . --platforms=android
 
-      # 4. 의존성 다운로드 및 해결 (패치가 적용되어 정상 통과)
+      # 4. 의존성 패키지 설치
       - name: Install dependencies
         run: flutter pub get
 
@@ -70,7 +59,7 @@ jobs:
       - name: Build Release APK
         run: flutter build apk --release --target-platform android-arm64
 
-      # 6. APK 아티팩트 업로드
+      # 6. APK 아티팩트 제출
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
         with:
