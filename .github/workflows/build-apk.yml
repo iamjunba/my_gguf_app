@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up Java JDK 17
         uses: actions/setup-java@v4
@@ -19,9 +21,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Android NDK
+      - name: Install Android NDK & CMake
         run: |
-          sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653"
+          sudo ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/25.2.9519653" >> $GITHUB_ENV
 
       - name: Set up Flutter
@@ -31,16 +33,35 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # [핵심] 호환되지 않는 Gradle 구조를 최신 프로젝트 스펙으로 재생성합니다.
+      # 1. 안드로이드 Gradle 빌드 파일 최신 규격 재생성
       - name: Re-generate Android Project Structure
         run: flutter create . --platforms=android
 
+      # 2. 의존성 다운로드
       - name: Install dependencies
         run: flutter pub get
 
+      # 3. llama_cpp_dart 패키지 내부의 llama.cpp C++ 소스 코드 가져오기 (절대경로 및 강제 재설치)
+      - name: Setup llama.cpp Native Source
+        run: |
+          PUB_CACHE_DIR="$HOME/.pub-cache/hosted/pub.dev"
+          LLAMA_PKG=$(find "$PUB_CACHE_DIR" -maxdepth 1 -name "llama_cpp_dart-*" | head -n 1)
+          
+          if [ -n "$LLAMA_PKG" ]; then
+            echo "Found package at: $LLAMA_PKG"
+            cd "$LLAMA_PKG/android"
+            rm -rf llama.cpp
+            git clone --recursive https://github.com/ggerganov/llama.cpp.git
+          else
+            echo "Error: llama_cpp_dart package not found in pub cache"
+            exit 1
+          fi
+
+      # 4. APK 빌드
       - name: Build Release APK
         run: flutter build apk --release --target-platform android-arm64
 
+      # 5. 아티팩트 업로드
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
         with:
