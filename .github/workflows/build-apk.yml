@@ -38,10 +38,10 @@ jobs:
 
       - name: Generate App Source Code & Config
         run: |
-          # 1. [핵심 수정] 안드로이드 뼈대 폴더 먼저 생성 (이 부분이 빠져있었습니다!)
+          # 1. 안드로이드 플랫폼 뼈대 생성
           flutter create . --platforms=android --overwrite
 
-          # 2. pubspec.yaml 덮어쓰기 (필수 패키지 포함)
+          # 2. pubspec.yaml 작성
           cat << 'EOF' > pubspec.yaml
           name: local_ai_runner
           description: Local GGUF LLM Runner
@@ -69,7 +69,7 @@ jobs:
             uses-material-design: true
           EOF
 
-          # 3. 소스 코드 생성
+          # 3. Dart AOT 컴파일 에러가 수정된 main.dart 생성
           mkdir -p lib
           cat << 'EOF' > lib/main.dart
           import 'package:flutter/material.dart';
@@ -123,7 +123,7 @@ jobs:
             List<ChatSession> _sessions = [];
             ChatSession? _currentSession;
             bool _isModelLoaded = false;
-            Llama? _llama;
+            dynamic _llamaParent;
 
             @override
             void initState() {
@@ -144,12 +144,12 @@ jobs:
 
             Future<void> _initLlamaModel(String path) async {
               try {
-                _llama = Llama(path);
+                _llamaParent = LlamaParent(path);
                 setState(() {
                   _isModelLoaded = true;
                 });
               } catch (e) {
-                print("Model load error: $e");
+                debugPrint("Model load error: $e");
               }
             }
 
@@ -179,9 +179,11 @@ jobs:
                   _modelPath = path;
                 });
                 _initLlamaModel(path);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('모델 로드됨: ${result.files.single.name}')),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('모델 선택됨: ${result.files.single.name}')),
+                  );
+                }
               }
             }
 
@@ -389,7 +391,7 @@ jobs:
           }
           EOF
 
-          # 4. 방금 만든 android 폴더에 Gradle 및 NDK 설정 주입
+          # 4. Gradle 및 NDK 환경 고정
           echo "org.gradle.jvmargs=-Xmx4g" >> android/gradle.properties
           echo "android.useAndroidX=true" >> android/gradle.properties
           echo "android.enableJetifier=true" >> android/gradle.properties
@@ -402,11 +404,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # 상세 내역 추적을 위해 --verbose 플래그 추가
       - name: Build Release APK
-        run: flutter build apk --release --target-platform android-arm64
+        run: flutter build apk --release --target-platform android-arm64 --verbose
 
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: local-gguv-ai-runner-release.apk
+          name: local-gguf-ai-runner-release.apk
           path: build/app/outputs/flutter-apk/app-release.apk
