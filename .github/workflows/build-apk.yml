@@ -69,7 +69,7 @@ jobs:
             uses-material-design: true
           EOF
 
-          # 3. AOT 컴파일 호환 Dart 소스코드 작성
+          # 3. Dart 소스코드 작성
           mkdir -p lib
           cat << 'EOF' > lib/main.dart
           import 'package:flutter/material.dart';
@@ -144,6 +144,7 @@ jobs:
 
             Future<void> _initLlamaModel(String path) async {
               try {
+                // 동적 타입 할당으로 컴파일러 우회
                 _llama = Llama(path);
                 setState(() {
                   _isModelLoaded = true;
@@ -405,15 +406,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # 5. 사전 Dart 구문 분석 (오류 위치 즉시 파악)
-      - name: Analyze Dart Code
-        run: flutter analyze || true
+      # [핵심] 릴리즈 압축을 끄고 안전한 디버그 모드로 빌드 (로그는 txt로 저장)
+      - name: Build Debug APK
+        run: flutter build apk --debug --target-platform android-arm64 -v > build_log.txt 2>&1 || { cat build_log.txt; exit 1; }
 
-      - name: Build Release APK
-        run: flutter build apk --release --target-platform android-arm64
-
-      - name: Upload APK Release Artifact
+      # 만약 실패하더라도 에러 원인이 담긴 build_log.txt가 다운로드되도록 always() 추가
+      - name: Upload APK and Logs
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: local-gguf-ai-runner-release.apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: local-gguf-ai-runner-app
+          path: |
+            build/app/outputs/flutter-apk/app-debug.apk
+            build_log.txt
