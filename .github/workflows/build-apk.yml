@@ -69,7 +69,7 @@ jobs:
             uses-material-design: true
           EOF
 
-          # 3. Dart AOT 컴파일 에러가 수정된 main.dart 생성
+          # 3. AOT 컴파일 호환 Dart 소스코드 작성
           mkdir -p lib
           cat << 'EOF' > lib/main.dart
           import 'package:flutter/material.dart';
@@ -123,7 +123,7 @@ jobs:
             List<ChatSession> _sessions = [];
             ChatSession? _currentSession;
             bool _isModelLoaded = false;
-            dynamic _llamaParent;
+            dynamic _llama;
 
             @override
             void initState() {
@@ -144,7 +144,7 @@ jobs:
 
             Future<void> _initLlamaModel(String path) async {
               try {
-                _llamaParent = LlamaParent(path);
+                _llama = Llama(path);
                 setState(() {
                   _isModelLoaded = true;
                 });
@@ -391,7 +391,7 @@ jobs:
           }
           EOF
 
-          # 4. Gradle 및 NDK 환경 고정
+          # 4. Gradle 및 NDK 설정 적용
           echo "org.gradle.jvmargs=-Xmx4g" >> android/gradle.properties
           echo "android.useAndroidX=true" >> android/gradle.properties
           echo "android.enableJetifier=true" >> android/gradle.properties
@@ -400,13 +400,17 @@ jobs:
           sed -i 's/minSdkVersion.*/minSdkVersion 26/g' android/app/build.gradle || true
           sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle || true
           sed -i 's/minSdk = .*/minSdk = 26/g' android/app/build.gradle.kts || true
+          sed -i 's/flutter.minSdkVersion/26/g' android/app/build.gradle.kts || true
 
       - name: Install dependencies
         run: flutter pub get
 
-      # 상세 내역 추적을 위해 --verbose 플래그 추가
+      # 5. 사전 Dart 구문 분석 (오류 위치 즉시 파악)
+      - name: Analyze Dart Code
+        run: flutter analyze || true
+
       - name: Build Release APK
-        run: flutter build apk --release --target-platform android-arm64 --verbose
+        run: flutter build apk --release --target-platform android-arm64
 
       - name: Upload APK Release Artifact
         uses: actions/upload-artifact@v4
